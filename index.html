@@ -1,0 +1,159 @@
+<!DOCTYPE html>   
+<html>   
+<head>
+    <meta charset="UTF-8">
+    <title>My Cesium App</title>
+    <style>
+        html, body {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+        }
+
+        #cesiumContainer {
+            width: 100%;
+            height: 100%;
+        }
+    </style>
+    <!-- Cesium 核心脚本 -->
+    <script src="/Cesium/Cesium.js"></script>
+    <link href="/Cesium/Widgets/widgets.css" rel="stylesheet" />
+    <link rel="stylesheet" href="index.css" />
+
+</head>   
+<body>
+    <div id="importPanel">
+
+        <input type="file" id="fileInput" accept=".json,.geojson" />
+        <select id="fieldSelect" style="margin-left:10px;">
+            <option value="">选择拉伸字段</option>
+        </select>
+        <button id="applyBtn" style="margin-left:10px;">应用拉伸</button>
+    </div>
+
+    <div id="cesiumContainer"></div>
+    <div id="colorPicker" style="position: absolute; top: 10px; left: 10px; background: rgba(255, 255, 255, 0.9); padding: 10px; border-radius: 5px; box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);">
+        <h4 style="margin: 0 0 10px;">设置建筑颜色</h4>
+        <button id="whiteColor" style="margin: 5px; padding: 5px 10px;">白色</button>
+        <button id="lightBlueColor" style="margin: 5px; padding: 5px 10px;">淡蓝色</button>
+        <button id="randomColor" style="margin: 5px; padding: 5px 10px;">随机颜色</button>
+    </div>
+    <script type="module">
+        Cesium.Ion.defaultAccessToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiJkNTg2MTU2My00MjZhLTRjY2YtYjgxZi0xZmQ2OGM2YTk0MzciLCJpZCI6MjkyMjY2LCJpYXQiOjE3NDQxNzQ5OTl9.6PSUKNhG2qgFQFjFVQ28DxGR4as0KzhoW17i0Wh3zRU';
+        const viewer = new Cesium.Viewer('cesiumContainer');
+
+        let dataSource = null;
+        let entities = [];
+        let geojsonData = null;
+
+        // 监听文件导入
+        document.getElementById('fileInput').addEventListener('change', function (e) {
+            const file = e.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = function (evt) {
+                try {
+                    geojsonData = JSON.parse(evt.target.result);
+                    // 检查是否为GeoJSON格式
+                    if (!geojsonData.type || geojsonData.type !== "FeatureCollection" || !Array.isArray(geojsonData.features)) {
+                        alert('请导入标准GeoJSON格式的.json文件');
+                        return;
+                    }
+                    // 动态生成字段下拉
+                    const props = geojsonData.features[0]?.properties || {};
+                    const select = document.getElementById('fieldSelect');
+                    select.innerHTML = '<option value="">选择拉伸字段</option>';
+                    Object.keys(props).forEach(key => {
+                        select.innerHTML += `<option value="${key}">${key}</option>`;
+                    });
+                    // 加载数据到Cesium
+                    if (dataSource) {
+                        viewer.dataSources.remove(dataSource);
+                    }
+                    Cesium.GeoJsonDataSource.load(geojsonData, {
+                        stroke: Cesium.Color.RED,
+                        fill: Cesium.Color.SKYBLUE.withAlpha(0.5),
+                        strokeWidth: 4,
+                    }).then(ds => {
+                        dataSource = ds;
+                        viewer.dataSources.add(ds);
+                        viewer.flyTo(ds);
+                        entities = ds.entities.values;
+                    });
+                } catch (err) {
+                    alert('文件格式错误');
+                }
+            };
+            reader.readAsText(file);
+        });
+
+        // 应用拉伸
+        document.getElementById('applyBtn').addEventListener('click', function () {
+            const field = document.getElementById('fieldSelect').value;
+            if (!field) {
+                alert('请选择拉伸字段');
+                return;
+            }
+            entities.forEach(entity => {
+                if (entity.polygon && entity.properties && entity.properties[field]) {
+                    let h = Number(entity.properties[field].getValue());
+                    if (isNaN(h)) h = 0;
+                    entity.polygon.extrudedHeight = h * 5; // 可根据需要调整比例
+                } else if (entity.polygon) {
+                    entity.polygon.extrudedHeight = 0;
+                }
+            });
+        });
+
+        // 颜色选择逻辑
+        const setColor = (color) => {
+            entities.forEach((entity) => {
+                if (entity.polygon) {
+                    entity.polygon.material = new Cesium.ColorMaterialProperty(color);
+                }
+            });
+        };
+
+        document.getElementById('whiteColor').addEventListener('click', () => {
+            setColor(Cesium.Color.WHITE);
+        });
+        document.getElementById('lightBlueColor').addEventListener('click', () => {
+            setColor(Cesium.Color.SKYBLUE.withAlpha(0.5));
+        });
+        document.getElementById('randomColor').addEventListener('click', () => {
+            entities.forEach((entity) => {
+                if (entity.polygon) {
+                    entity.polygon.material = new Cesium.ColorMaterialProperty(
+                        Cesium.Color.fromRandom({ alpha: 1 })
+                    );
+                }
+            });
+        });
+
+        // 点击实体显示属性
+        viewer.selectedEntityChanged.addEventListener((selectedEntity) => {
+            if (selectedEntity) {
+                // 动态设置 InfoBox 的内容
+                let desc = `<div>
+                <h3 style="color: #FFD700; margin: 0;">建筑信息</h3>`;
+                if (selectedEntity.properties) {
+                    const props = selectedEntity.properties;
+                    for (let key in props) {
+                        if (props.hasOwnProperty(key)) {
+                            desc += `<p><strong>${key}：</strong>${props[key].getValue()}</p>`;
+                        }
+                    }
+                }
+                desc += `</div>`;
+                selectedEntity.description = desc;
+            }
+        });
+       
+    </script>
+
+
+
+</body>   
+</html> 

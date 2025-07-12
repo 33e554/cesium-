@@ -1,0 +1,22 @@
+#importPanel {
+    position: absolute;
+    top: 10px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 10;
+    background: rgba(255,255,255,0.95);
+    padding: 10px;
+    border-radius: 6px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+    min-width: 340px;
+}
+
+.button-group {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+#fieldSelect, #applyBtn, #fileInput {
+    margin-left: 10px;
+}
